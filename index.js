@@ -22,7 +22,7 @@ const fileExtensions = {
     'css': 'text/css',
     'js': 'application/javascript',
     'png': 'image/png',
-    //'jpg': 'image/jpeg',
+    'jpg': 'image/jpeg',
     'gif': 'image/gif',
     'mp4': 'video/mp4',
     'ogg': 'video/ogg',
@@ -38,8 +38,8 @@ const proxy = (req, res) => {
             .on('response', (response) => {
                 copyResponseHeaders(response, res);
             })
-            .on('error', function (err) {
-                copyAndEnd(response, res, 500, err);
+            .on('error', function(err) {
+                copyAndEnd(res, 500, err);
             })
             .pipe(res);
     }
@@ -67,44 +67,46 @@ const proxy = (req, res) => {
 
                 if (asset.indexOf('/') !== 0) asset = '/' + asset;
 
-                fetchAsset(asset).then((assetData) => {
-                    let pushStream = res.push(asset, {
-                        request: { 'accept': '*/*' },
-                        response: { 'content-type': fileExtensions[getFileExtension(asset)] + '; charset=utf-8' }
-                    });
-
-                    pushStream.on('error', err => {
-                        console.log(err);
-                    });
-                    pushStream.end(assetData);
-                    resolve();
-                }).catch((response) => {
-                    resolve(); // simply no server push if something went wrong with the asset
+                let pushStream = res.push(asset, {
+                    request: { 'accept': '*/*' },
+                    response: { 'content-type': fileExtensions[getFileExtension(asset)] + '; charset=utf-8' }
                 });
+
+                pushStream.on('error', err => {
+                    console.log(err);
+                });
+
+                fetchAsset(asset, pushStream).then(resolve).catch(resolve);
             }));
         });
 
         Promise.all(promises).then(() => {
-            setTimeout(() => {
-                copyResponseHeaders(response, res);
-                res.end(body);
-            }, 1000);
+            copyResponseHeaders(response, res);
+            res.end(body);
         });
     });
 };
 
-function fetchAsset(assetUrl) {
+function pipeThrough(req, res) {
+
+}
+
+function fetchAsset(assetUrl, dest) {
     return new Promise((resolve, reject) => {
-        request(baseUrl + assetUrl, (err, response, body) => {
-            if (err) return reject(response);
-            if (response.statusCode !== 200) return reject(response);
-            return resolve(body);
-        });
+        request(baseUrl + assetUrl, { headers: { 'accept': fileExtensions[getFileExtension(assetUrl)] } })
+            .on('response', (response) => {
+                if (response.statusCode !== 200) return reject();
+            })
+            .on('err', () => {
+                return reject();
+            })
+            .pipe(dest);
+        resolve();
     });
 }
 
 function copyAndEnd(from, to, code, data) {
-    if (from) copyResponseHeaders(from, to);
+    if (from && to && typeof(from === 'object') && typeof(to === 'object')) copyResponseHeaders(from, to);
     to.writeHead(code);
     to.end(data);
 }
@@ -116,7 +118,7 @@ function copyResponseHeaders(from, to) {
     to.writeHead(from.statusCode);
 }
 
-http.createServer(spdyOpts, proxy).listen(443);
+http.createServer(spdyOpts, proxy).listen(8081);
 
 function getFileExtension(str) {
     return str.substr(str.lastIndexOf('.') + 1).split('?')[0];
