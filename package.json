@@ -17,7 +17,6 @@
     "connect": "^3.5.0",
     "express": "^4.14.0",
     "http-proxy": "^1.15.2",
-    "redbird": "^0.6.5",
     "request": "^2.78.0",
     "spdy": "^3.4.4",
     "xmldom": "^0.1.22",
