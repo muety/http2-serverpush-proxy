@@ -1,0 +1,19 @@
+{
+  "name": "server-push-proxy",
+  "version": "0.0.1",
+  "description": "A simple standalone reverse proxy that automatically enables server-push for assets related to a HTTP response.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node ."
+  },
+  "keywords": [
+    "http2",
+    "server-push"
+  ],
+  "author": "Ferdinand Mütsch",
+  "license": "MIT",
+  "dependencies": {
+    "redbird": "^0.6.5"
+  }
+}
