@@ -1,8 +1,6 @@
 'use strict';
 
 const http = require('spdy')
-    , httpProxy = require('http-proxy')
-    , proxy = httpProxy.createProxyServer()
     , fs = require('fs')
     , xpath = require('xpath')
     , dom = require('xmldom').DOMParser
@@ -24,65 +22,107 @@ const fileExtensions = {
     'css': 'text/css',
     'js': 'application/javascript',
     'png': 'image/png',
-    'jpg': 'image/jpeg'
+    'jpg': 'image/jpeg',
+    'gif': 'image/gif',
+    'mp4': 'video/mp4',
+    'ogg': 'video/ogg',
+    'svg': 'image/svg+xml'
 };
 
-let fooAsset = '';
-request('http://localhost:8080/assets/css/lato.css', (err, response, body) => {
-    fooAsset = body;
-});
+const assetCache = {};
 
+const proxy = (req, res) => {
+    if (!acceptsHtml(req) || (acceptsHtml(req) && fileExtensions.hasOwnProperty(getFileExtension(req.url)))) {
+        return request
+            .get(baseUrl + req.url, { headers: req.headers })
+            .on('response', (response) => {
+                copyResponseHeaders(response, res);
+            })
+            .on('error', function (err) {
+                copyAndEnd(response, res, 500, err);
+            })
+            .pipe(res);
+    }
 
-proxy.on('proxyRes', function (proxyRes, req, res, options) {
-    var responseBody = '';
+    request(baseUrl + req.url, { headers: req.headers }, (err, response, body) => {
+        if (err) return copyAndEnd(null, res, 500);
+        if (response.statusCode !== 200) return copyAndEnd(response, res, response.statusCode);
+        if (!body || body === '') return copyAndEnd(response, res, 404);
 
-    proxyRes.on('data', (chunk) => {
-        let c = chunk.toString();
-        responseBody += chunk.toString();
-    }).on('end', () => {
-        if (responseBody !== '') {
-            let assets = [];
-            let doc = new dom().parseFromString(responseBody);
+        let assets = [];
+        let doc = new dom().parseFromString(body);
 
-            xpathQueries.forEach((q) => {
-                let nodes = xpath.select(q, doc)
-                    .map(n => n.nodeValue)
-                    .filter(n => Object.keys(fileExtensions).includes(getFileExtension(n.toLowerCase())));
-                assets = assets.concat(nodes);
-            });
+        xpathQueries.forEach((q) => {
+            let nodes = xpath.select(q, doc)
+                .map(n => n.nodeValue)
+                .filter(n => fileExtensions.hasOwnProperty(getFileExtension(n.toLowerCase())));
+            assets = assets.concat(nodes);
+        });
 
-            assets.forEach((asset) => {
-                if (asset.indexOf('lato.css') === -1) return;
-                let target = asset.indexOf(baseUrl) === 0 ? asset : baseUrl + (asset.indexOf('/') === 0 ? asset : '/' + asset);
-                //request(target, (err, response, body) => {
-                //if (err) return console.log(err);
-                //if (response.statusCode !== 200) return console.log(response.statusCode);
-                //if (!body || body == '') return console.log('Body was empty.');
+        let promises = [];
 
-                let pushStream = res.push('https://localhost/assets/css/lato.css', {
-                    request: { 'accept': '*/*' },
-                    response: { 'content-type': 'text/css' }
+        assets.forEach((asset) => {
+            promises.push(new Promise((resolve, reject) => {
+                res.setHeader('link', `<${asset}>; rel=preload`);
+
+                if (asset.indexOf('/') !== 0) asset = '/' + asset;
+
+                fetchAsset(asset).then((assetData) => {
+                    let pushStream = res.push(asset, {
+                        request: { 'accept': '*/*' },
+                        response: { 'content-type': fileExtensions[getFileExtension(asset)] + '; charset=utf-8' }
+                    });
+
+                    pushStream.on('error', err => {
+                        console.log(err);
+                    });
+                    pushStream.end(assetData);
+                    resolve();
+                }).catch((response) => {
+                    resolve(); // simply no server push if something went wrong with the asset
                 });
+            }));
+        });
 
-                pushStream.on('error', err => {
-                    console.log(err);
-                });
-
-                pushStream.end(fooAsset);
-        res.end();
-                
-                //});
-            });
-        }
+        Promise.all(promises).then(() => {
+            setTimeout(() => {
+                copyResponseHeaders(response, res);
+                res.end(body);
+            }, 1000);
+        });
     });
-});
+};
 
-http.createServer(spdyOpts, (req, res) => {
-    proxy.web(req, res, {
-        target: 'http://localhost:8080'
+function fetchAsset(assetUrl) {
+    return new Promise((resolve, reject) => {
+        request(baseUrl + assetUrl, (err, response, body) => {
+            if (err) return reject(response);
+            if (response.statusCode !== 200) return reject(response);
+            return resolve(body);
+        });
     });
-}).listen(443);
+}
+
+function copyAndEnd(from, to, code, data) {
+    if (from) copyResponseHeaders(from, to);
+    to.writeHead(code);
+    to.end(data);
+}
+
+function copyResponseHeaders(from, to) {
+    for (let hKey in from.headers) {
+        to.setHeader(hKey, from.headers[hKey]);
+    }
+    to.writeHead(from.statusCode);
+}
+
+http.createServer(spdyOpts, proxy).listen(443);
 
 function getFileExtension(str) {
-    return str.substr(str.lastIndexOf('.') + 1);
+    let foo = str.substr(str.lastIndexOf('.') + 1).split('?')[0];
+    return str.substr(str.lastIndexOf('.') + 1).split('?')[0];
+}
+
+function acceptsHtml(req) {
+    return req.headers['accept'].indexOf('text/html') !== -1;
 }
