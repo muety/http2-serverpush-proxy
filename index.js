@@ -22,7 +22,7 @@ const fileExtensions = {
     'css': 'text/css',
     'js': 'application/javascript',
     'png': 'image/png',
-    'jpg': 'image/jpeg',
+    //'jpg': 'image/jpeg',
     'gif': 'image/gif',
     'mp4': 'video/mp4',
     'ogg': 'video/ogg',
@@ -32,7 +32,7 @@ const fileExtensions = {
 const assetCache = {};
 
 const proxy = (req, res) => {
-    if (!acceptsHtml(req) || (acceptsHtml(req) && fileExtensions.hasOwnProperty(getFileExtension(req.url)))) {
+    if (!acceptsHtml(req) || (acceptsHtml(req) && fileExtensions.hasOwnProperty(getFileExtension(req.url))) || !res.push) {
         return request
             .get(baseUrl + req.url, { headers: req.headers })
             .on('response', (response) => {
@@ -119,7 +119,6 @@ function copyResponseHeaders(from, to) {
 http.createServer(spdyOpts, proxy).listen(443);
 
 function getFileExtension(str) {
-    let foo = str.substr(str.lastIndexOf('.') + 1).split('?')[0];
     return str.substr(str.lastIndexOf('.') + 1).split('?')[0];
 }
 
