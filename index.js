@@ -34,7 +34,7 @@ const assetCache = {};
 const proxy = (req, res) => {
     if (req.method !== 'GET' || !acceptsHtml(req) || !res.push) return pipeThrough(req, res);
 
-    request(baseUrl + req.url, { headers: req.headers }, (err, response, body) => {
+    request(baseUrl + req.url, { headers: omit(req.headers, 'accept-encoding') }, (err, response, body) => {
         if (err) return copyAndEnd(null, res, 500);
         if (response.statusCode !== 200) return copyAndEnd(response, res, response.statusCode);
         if (!body || body === '') return copyAndEnd(response, res, 404);
@@ -65,7 +65,7 @@ const proxy = (req, res) => {
                     console.log(err);
                 });
 
-                fetchAsset(asset, pushStream).then(resolve).catch(resolve);
+                fetchAsset(asset, pushStream, omitContentRelatedHeaders(req.headers, { 'accept': fileExtensions[getFileExtension(asset)] })).then(resolve).catch(resolve);
             }));
         });
 
@@ -86,19 +86,35 @@ function pipeThrough(req, res) {
     }).pipe(res);
 }
 
-function fetchAsset(assetUrl, dest) {
+function fetchAsset(assetUrl, destPushStream, headers) {
     return new Promise((resolve, reject) => {
-        request(baseUrl + assetUrl, { headers: { 'accept': fileExtensions[getFileExtension(assetUrl)] } })
+        request(baseUrl + assetUrl, { headers: headers })
             .on('response', (response) => {
-                if (response.statusCode !== 200) return reject();
-                dest.sendHeaders(response.headers);
+                destPushStream.sendHeaders(response.headers);
                 resolve();
             })
             .on('err', () => {
                 return reject();
             })
-            .pipe(dest);
+            .pipe(destPushStream);
     });
+}
+
+function omitContentRelatedHeaders(oldHeaders, additionalHeaderFields) {
+    let newHeaders = omit(oldHeaders, ['accept', 'content-type']);
+    Object.assign(newHeaders, additionalHeaderFields);
+    return newHeaders;
+}
+
+// Returns new object without propertyKeys properties
+function omit(obj, propertyKeys) {
+    if (!Array.isArray(propertyKeys)) propertyKeys = [propertyKeys];
+    let newObj = {};
+    Object.assign(newObj, obj);
+    for (let key in propertyKeys) {
+        delete newObj[key];
+    }
+    return newObj;
 }
 
 function copyAndEnd(from, to, code, data) {
