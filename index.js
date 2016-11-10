@@ -32,17 +32,7 @@ const fileExtensions = {
 const assetCache = {};
 
 const proxy = (req, res) => {
-    if (!acceptsHtml(req) || (acceptsHtml(req) && fileExtensions.hasOwnProperty(getFileExtension(req.url))) || !res.push) {
-        return request
-            .get(baseUrl + req.url, { headers: req.headers })
-            .on('response', (response) => {
-                copyResponseHeaders(response, res);
-            })
-            .on('error', function(err) {
-                copyAndEnd(res, 500, err);
-            })
-            .pipe(res);
-    }
+    if (req.method !== 'GET' || !acceptsHtml(req) || !res.push) return pipeThrough(req, res);
 
     request(baseUrl + req.url, { headers: req.headers }, (err, response, body) => {
         if (err) return copyAndEnd(null, res, 500);
@@ -68,8 +58,7 @@ const proxy = (req, res) => {
                 if (asset.indexOf('/') !== 0) asset = '/' + asset;
 
                 let pushStream = res.push(asset, {
-                    request: { 'accept': '*/*' },
-                    response: { 'content-type': fileExtensions[getFileExtension(asset)] + '; charset=utf-8' }
+                    request: { 'accept': '*/*' }
                 });
 
                 pushStream.on('error', err => {
@@ -88,7 +77,13 @@ const proxy = (req, res) => {
 };
 
 function pipeThrough(req, res) {
-
+    req.pipe(request({
+        method: req.method,
+        url: baseUrl + req.url,
+        headers: req.headers
+    })).on('error', function(err) {
+        copyAndEnd(null, res, 500, err);
+    }).pipe(res);
 }
 
 function fetchAsset(assetUrl, dest) {
@@ -96,17 +91,18 @@ function fetchAsset(assetUrl, dest) {
         request(baseUrl + assetUrl, { headers: { 'accept': fileExtensions[getFileExtension(assetUrl)] } })
             .on('response', (response) => {
                 if (response.statusCode !== 200) return reject();
+                dest.sendHeaders(response.headers);
+                resolve();
             })
             .on('err', () => {
                 return reject();
             })
             .pipe(dest);
-        resolve();
     });
 }
 
 function copyAndEnd(from, to, code, data) {
-    if (from && to && typeof(from === 'object') && typeof(to === 'object')) copyResponseHeaders(from, to);
+    if (from && to && typeof (from === 'object') && typeof (to === 'object')) copyResponseHeaders(from, to);
     to.writeHead(code);
     to.end(data);
 }
