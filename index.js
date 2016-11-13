@@ -4,7 +4,8 @@ const http = require('spdy')
     , fs = require('fs')
     , request = require('request')
     , app = require('connect')()
-    , proxy = require('./proxy');
+    , proxy = require('./proxy')
+    , push = require('./push');
 
 const spdyOpts = {
     key: fs.readFileSync(__dirname + '/certs/dev-key.pem'),
@@ -17,8 +18,8 @@ const spdyOpts = {
 };
 
 app.use(proxy);
+app.use(push);
 app.use((req, res) => {
-    if (res.htmlBody) res.write(res.htmlBody);
     res.end();
 });
 
