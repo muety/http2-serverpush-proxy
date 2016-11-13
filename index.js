@@ -4,8 +4,8 @@ const http = require('spdy')
     , fs = require('fs')
     , request = require('request')
     , app = require('connect')()
-    , proxy = require('./proxy')
-    , push = require('./push');
+    , proxy = require('./proxy')('http://localhost:8080')
+    , push = require('./push')({baseUrl: 'http://localhost:8080', extensions: ['css']});
 
 const spdyOpts = {
     key: fs.readFileSync(__dirname + '/certs/dev-key.pem'),

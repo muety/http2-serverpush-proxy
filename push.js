@@ -5,9 +5,7 @@ const xpath = require('xpath')
     , request = require('request')
     , utils = require('./utils');
 
-const baseUrl = 'http://localhost:8080';
-const xpathQueries = ["//link/@href", "//img/@src", "//script/@src"];
-const fileExtensions = {
+const FILE_EXTENSIONS = {
     'css': { mime: 'text/css', as: 'style' },
     'js': { mime: 'application/javascript', as: 'script' },
     'png': { mime: 'image/png', as: 'image' },
@@ -18,6 +16,9 @@ const fileExtensions = {
     'ogg': { mime: 'video/ogg', as: 'video' }
 };
 
+const cfg = { baseUrl: '', extensions: {} }
+    , xpathQueries = ["//link/@href", "//img/@src", "//script/@src"];
+
 function parseAssetsFromHtml(html, errorCallback) {
     let assets = [];
     let doc = new dom({
@@ -27,7 +28,7 @@ function parseAssetsFromHtml(html, errorCallback) {
     xpathQueries.forEach((q) => {
         let nodes = xpath.select(q, doc)
             .map(n => n.nodeValue)
-            .filter(n => fileExtensions.hasOwnProperty(getFileExtension(n.toLowerCase())));
+            .filter(n => cfg.extensions.hasOwnProperty(getFileExtension(n.toLowerCase())));
         assets = assets.concat(nodes);
     });
     return assets;
@@ -35,7 +36,7 @@ function parseAssetsFromHtml(html, errorCallback) {
 
 function fetchAsset(assetUrl, destPushStream, headers) {
     return new Promise((resolve, reject) => {
-        request(baseUrl + assetUrl, { headers: headers })
+        request(cfg.baseUrl + assetUrl, { headers: headers })
             .on('response', (response) => {
                 destPushStream.sendHeaders(response.headers);
             })
@@ -66,35 +67,41 @@ function getFileExtension(str) {
     return str.substr(str.lastIndexOf('.') + 1).split('?')[0];
 }
 
-module.exports = (req, res, next) => {
-    if (!res.htmlBody) return next();
-    let body = res.htmlBody;
+module.exports = (config) => {
+    cfg.baseUrl = config.baseUrl.lastIndexOf('/') === config.baseUrl.length - 1 ? config.baseUrl.split('/').slice(0, -1).join('/') : config.baseUrl;
+    if (config.extensions && config.extensions.length) config.extensions.forEach((e) => { cfg.extensions[e] = FILE_EXTENSIONS[e]} )
+    else cfg.extensions = FILE_EXTENSIONS;
 
-    let assets = parseAssetsFromHtml(body, () => {
-        res.statusCode = 500;
-        next();
-    });
+    return (req, res, next) => {
+        if (!res.htmlBody) return next();
+        let body = res.htmlBody;
 
-    let promises = [];
-    let linkHeader = '';
+        let assets = parseAssetsFromHtml(body, () => {
+            res.statusCode = 500;
+            next();
+        });
 
-    assets.forEach((asset, i) => {
-        if (/^(http(s)?:)?\/\//.test(asset)) return;
-        if (asset.indexOf('/') !== 0) asset = '/' + asset;
+        let promises = [];
+        let linkHeader = '';
 
-        promises.push(new Promise((resolve, reject) => {
-            let pushStream = res.push(asset, { request: { 'accept': '*/*' } });
-            pushStream.on('error', () => { return; });
+        assets.forEach((asset, i) => {
+            if (/^(http(s)?:)?\/\//.test(asset)) return;
+            if (asset.indexOf('/') !== 0) asset = '/' + asset;
 
-            fetchAsset(asset, pushStream, omitContentRelatedHeaders(req.headers, { 'accept': fileExtensions[getFileExtension(asset)].mime })).then(resolve).catch(resolve);
-        }));
+            promises.push(new Promise((resolve, reject) => {
+                let pushStream = res.push(asset, { request: { 'accept': '*/*' } });
+                pushStream.on('error', () => { return; });
 
-        linkHeader += `<${asset}>; rel=preload; as=${fileExtensions[getFileExtension(asset)].as}${i < assets.length - 1 ? ',' : ''}`;
-    });
+                fetchAsset(asset, pushStream, omitContentRelatedHeaders(req.headers, { 'accept': cfg.extensions[getFileExtension(asset)].mime })).then(resolve).catch(resolve);
+            }));
 
-    Promise.all(promises).then(() => {
-        //if (assets.length) res.setHeader('link', linkHeader);
-        res.write(body);
-        next();
-    });
+            linkHeader += `<${asset}>; rel=preload; as=${cfg.extensions[getFileExtension(asset)].as}${i < assets.length - 1 ? ',' : ''}`;
+        });
+
+        Promise.all(promises).then(() => {
+            //if (assets.length) res.setHeader('link', linkHeader);
+            res.write(body);
+            next();
+        });
+    };
 };
