@@ -4,7 +4,9 @@ const http = require('spdy')
     , fs = require('fs')
     , xpath = require('xpath')
     , dom = require('xmldom').DOMParser
-    , request = require('request');
+    , request = require('request')
+    , app = require('connect')()
+    , stream = require('stream');
 
 const spdyOpts = {
     key: fs.readFileSync(__dirname + '/certs/dev-key.pem'),
@@ -19,71 +21,94 @@ const spdyOpts = {
 const baseUrl = 'http://localhost:8080';
 const xpathQueries = ["//link/@href", "//img/@src", "//script/@src"];
 const fileExtensions = {
-    'css': 'text/css',
-    'js': 'application/javascript',
-    'png': 'image/png',
-    'jpg': 'image/jpeg',
-    'gif': 'image/gif',
-    'mp4': 'video/mp4',
-    'ogg': 'video/ogg',
-    'svg': 'image/svg+xml'
+    'css': { mime: 'text/css', as: 'style' },
+    'js': { mime: 'application/javascript', as: 'script' },
+    'png': { mime: 'image/png', as: 'image' },
+    'jpg': { mime: 'image/jpeg', as: 'image' },
+    'gif': { mime: 'image/gif', as: 'image' },
+    'svg': { mime: 'image/svg+xml', as: 'image' },
+    'mp4': { mime: 'video/mp4', as: 'video' },
+    'ogg': { mime: 'video/ogg', as: 'video' }
 };
 
 const assetCache = {};
 
-const proxy = (req, res) => {
-    if (req.method !== 'GET' || !acceptsHtml(req) || !res.push) return pipeThrough(req, res);
+const proxy = (req, res, next) => {
+    if (req.method !== 'GET' || !acceptsHtml(req) || fileExtensions.hasOwnProperty(getFileExtension(req.url)) || !res.push) {
+        return pipeThrough(req, res).then(() => {
+            next();
+            return res.end();
+        });
+    }
 
-    request(baseUrl + req.url, { headers: omit(req.headers, 'accept-encoding') }, (err, response, body) => {
+    request(baseUrl + req.url, { headers: omit(req.headers, 'accept-encoding'), encoding: null }, (err, response, rawBody) => {
+        let body = rawBody.toString('utf-8');
+
         if (err) return copyAndEnd(null, res, 500);
         if (response.statusCode !== 200) return copyAndEnd(response, res, response.statusCode);
         if (!body || body === '') return copyAndEnd(response, res, 404);
 
-        let assets = [];
-        let doc = new dom().parseFromString(body);
-
-        xpathQueries.forEach((q) => {
-            let nodes = xpath.select(q, doc)
-                .map(n => n.nodeValue)
-                .filter(n => fileExtensions.hasOwnProperty(getFileExtension(n.toLowerCase())));
-            assets = assets.concat(nodes);
+        let isHtml = true;
+        let assets = parseAssetsFromHtml(body, () => {
+            if (!isHtml) return;
+            copyResponseHeaders(response, res);
+            next();
+            res.end(rawBody);
+            isHtml = false;
         });
 
         let promises = [];
+        let linkHeader = '';
 
-        assets.forEach((asset) => {
+        assets.forEach((asset, i) => {
             promises.push(new Promise((resolve, reject) => {
-                res.setHeader('link', `<${asset}>; rel=preload`);
-
                 if (asset.indexOf('/') !== 0) asset = '/' + asset;
 
-                let pushStream = res.push(asset, {
-                    request: { 'accept': '*/*' }
-                });
+                let pushStream = res.push(asset, { request: { 'accept': '*/*' } });
+                pushStream.on('error', console.log);
 
-                pushStream.on('error', err => {
-                    console.log(err);
-                });
-
-                fetchAsset(asset, pushStream, omitContentRelatedHeaders(req.headers, { 'accept': fileExtensions[getFileExtension(asset)] })).then(resolve).catch(resolve);
+                fetchAsset(asset, pushStream, omitContentRelatedHeaders(req.headers, { 'accept': fileExtensions[getFileExtension(asset)].mime })).then(resolve).catch(resolve);
             }));
+            linkHeader += `<${asset}>; rel=preload; as=${fileExtensions[getFileExtension(asset)].as}${i < assets.length - 1 ? ',' : ''}`;
         });
 
         Promise.all(promises).then(() => {
-            copyResponseHeaders(response, res);
-            res.end(body);
+            //if (assets.length) res.setHeader('link', linkHeader);
+            copyResponseHeaders(response, res, true);
+            next();
+            res.end(isHtml ? body : rawBody);
         });
     });
 };
 
+function parseAssetsFromHtml(html, errorCallback) {
+    let assets = [];
+    let doc = new dom({
+        errorHandler: {error: errorCallback}
+    }).parseFromString(html);
+
+    xpathQueries.forEach((q) => {
+        let nodes = xpath.select(q, doc)
+            .map(n => n.nodeValue)
+            .filter(n => fileExtensions.hasOwnProperty(getFileExtension(n.toLowerCase())));
+        assets = assets.concat(nodes);
+    });
+    return assets;
+}
+
 function pipeThrough(req, res) {
-    req.pipe(request({
-        method: req.method,
-        url: baseUrl + req.url,
-        headers: req.headers
-    })).on('error', function(err) {
-        copyAndEnd(null, res, 500, err);
-    }).pipe(res);
+    return new Promise((resolve, reject) => {
+        req.pipe(request({
+            method: req.method,
+            url: baseUrl + req.url,
+            headers: req.headers
+        }).on('response', (response) => {
+            copyResponseHeaders(response, res, true);
+            setTimeout(resolve, 0);
+        }).on('error', function (err) {
+            copyAndEnd(null, res, 500, err);
+        })).pipe(res);
+    });
 }
 
 function fetchAsset(assetUrl, destPushStream, headers) {
@@ -91,7 +116,7 @@ function fetchAsset(assetUrl, destPushStream, headers) {
         request(baseUrl + assetUrl, { headers: headers })
             .on('response', (response) => {
                 destPushStream.sendHeaders(response.headers);
-                resolve();
+                setTimeout(resolve, 0);
             })
             .on('err', () => {
                 return reject();
@@ -118,19 +143,17 @@ function omit(obj, propertyKeys) {
 }
 
 function copyAndEnd(from, to, code, data) {
-    if (from && to && typeof (from === 'object') && typeof (to === 'object')) copyResponseHeaders(from, to);
+    if (from && to && typeof (from === 'object') && typeof (to === 'object')) copyResponseHeaders(from, to, true);
     to.writeHead(code);
     to.end(data);
 }
 
-function copyResponseHeaders(from, to) {
+function copyResponseHeaders(from, to, notWriteHead) {
     for (let hKey in from.headers) {
         to.setHeader(hKey, from.headers[hKey]);
     }
-    to.writeHead(from.statusCode);
+    if (!notWriteHead) to.writeHead(from.statusCode);
 }
-
-http.createServer(spdyOpts, proxy).listen(8081);
 
 function getFileExtension(str) {
     return str.substr(str.lastIndexOf('.') + 1).split('?')[0];
@@ -139,3 +162,6 @@ function getFileExtension(str) {
 function acceptsHtml(req) {
     return req.headers['accept'].indexOf('text/html') !== -1;
 }
+
+app.use(proxy);
+http.createServer(spdyOpts, app).listen(8081);
