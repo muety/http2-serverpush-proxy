@@ -6,6 +6,7 @@ const request = require('request')
     , utils = require('./utils');
 
 module.exports = (baseUrl) => {
+    if (/^https/.test(baseUrl)) return console.log('[Proxy Middleware] Error: Proxied endpoints must not be encrypted (no https)!');
     return (req, res, next) => {
         const negotiator = new Negotiator(req);
         let htmlAccepted = !!negotiator.mediaType(['text/html']);
@@ -14,7 +15,7 @@ module.exports = (baseUrl) => {
         let proxyRequest = req.pipe(request({
             method: req.method,
             url: baseUrl + req.url,
-            headers: req.headers,
+            headers: utils.omit(req.headers, ['accept-encoding']),
             encoding: null
         })).on('response', (response) => {
             utils.copyHeaders(response, res);

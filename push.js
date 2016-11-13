@@ -47,20 +47,9 @@ function fetchAsset(assetUrl, destPushStream, headers) {
 }
 
 function omitContentRelatedHeaders(oldHeaders, additionalHeaderFields) {
-    let newHeaders = omit(oldHeaders, ['accept', 'content-type']);
+    let newHeaders = utils.omit(oldHeaders, ['accept', 'content-type']);
     Object.assign(newHeaders, additionalHeaderFields);
     return newHeaders;
-}
-
-// Returns new object without propertyKeys properties
-function omit(obj, propertyKeys) {
-    if (!Array.isArray(propertyKeys)) propertyKeys = [propertyKeys];
-    let newObj = {};
-    Object.assign(newObj, obj);
-    for (let key in propertyKeys) {
-        delete newObj[key];
-    }
-    return newObj;
 }
 
 function getFileExtension(str) {
@@ -68,6 +57,7 @@ function getFileExtension(str) {
 }
 
 module.exports = (config) => {
+    if (/^https/.test(config.baseUrl)) return console.log('[Push Middleware] Error: Proxied endpoints must not be encrypted (no https)!');
     cfg.baseUrl = config.baseUrl.lastIndexOf('/') === config.baseUrl.length - 1 ? config.baseUrl.split('/').slice(0, -1).join('/') : config.baseUrl;
     if (config.extensions && config.extensions.length) config.extensions.forEach((e) => { cfg.extensions[e] = FILE_EXTENSIONS[e]} )
     else cfg.extensions = FILE_EXTENSIONS;
