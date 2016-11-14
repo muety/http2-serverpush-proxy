@@ -63,12 +63,12 @@ module.exports = (config) => {
     else cfg.extensions = FILE_EXTENSIONS;
 
     return (req, res, next) => {
-        if (!res.htmlBody) return next();
+        if (!res.htmlBody) return res.end();
         let body = res.htmlBody;
 
         let assets = parseAssetsFromHtml(body, () => {
             res.statusCode = 500;
-            next();
+            res.end();
         });
 
         let promises = [];
@@ -91,7 +91,7 @@ module.exports = (config) => {
         Promise.all(promises).then(() => {
             //if (assets.length) res.setHeader('link', linkHeader);
             res.write(body);
-            next();
+            res.end();
         });
     };
 };
