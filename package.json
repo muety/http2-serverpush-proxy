@@ -2,20 +2,38 @@
   "name": "server-push-proxy",
   "version": "0.0.1",
   "description": "A simple standalone reverse proxy that automatically enables server-push for assets related to a HTTP response.",
+  "homepage": "https://github.com/n1try/http2-serverpush-proxy",
+  "author": {
+    "name": "Ferdinand Mütsch",
+    "url": "https://ferdinand-muetsch.de"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/n1try/http2-serverpush-proxy"
+  },
+  "bugs": {
+    "url": "https://github.com/n1try/http2-serverpush-proxy/issues"
+  },
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node ."
   },
+  "bin": {
+    "serverpush-proxy": "./index.js"
+  },
   "keywords": [
     "http2",
-    "server-push"
+    "server-push",
+    "connect",
+    "express",
+    "middleware",
+    "reverse",
+    "proxy"
   ],
-  "author": "Ferdinand Mütsch",
   "license": "MIT",
   "dependencies": {
     "connect": "^3.5.0",
-    "express": "^4.14.0",
     "http-proxy": "^1.15.2",
     "negotiator": "^0.6.1",
     "request": "^2.78.0",

@@ -4,8 +4,8 @@ const http = require('spdy')
     , fs = require('fs')
     , request = require('request')
     , app = require('connect')()
-    , proxy = require('./proxy')
-    , push = require('./push')
+    , proxy = require('./lib/proxy')
+    , push = require('./lib/push')
     , argv = require('yargs').argv
     , path = require('path');
 
