@@ -32,6 +32,6 @@ module.exports = (baseUrl) => {
             next();
         });
 
-        if (!htmlAccepted) proxyRequest.pipe(res);
+        if (!htmlAccepted || req.method !== 'GET') proxyRequest.pipe(res);
     };
 };

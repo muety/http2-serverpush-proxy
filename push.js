@@ -63,7 +63,7 @@ module.exports = (config) => {
     else cfg.extensions = FILE_EXTENSIONS;
 
     return (req, res, next) => {
-        if (!res.htmlBody) return res.end();
+        if (!res.htmlBody || !res.push) return res.end();
         let body = res.htmlBody;
 
         let assets = parseAssetsFromHtml(body, () => {
