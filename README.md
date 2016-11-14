@@ -2,6 +2,8 @@
 
 This is a reverse proxy that helps you to automatically make use of HTTP/2.0's [server push](http://blog.xebia.com/http2-server-push/) mechanism for your static websites.
 
+[![NPM](https://nodei.co/npm/http2-serverpush-proxy.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/http2-serverpush-proxy/)
+
 ## How it works
 Usually, websites consist of multiple assets, like CSS and JS files as well as images like PNGs, JPGs and SVGs. Traditionally, a user's browser fetches the HTML first, parses it and then downloads all linked assets. However, this is slow, since the assets can't be loaded before the HTML is completely fetched and parsed. With server push, your webserver can actively send those assets to the client browser even before it requested them. To prevent you from having to implement this functionality, _http2-serverpush-proxy_ sits as a proxy between your actual webserver and the user. In contrast to some other approaches like [http2-push-manifest](https://github.com/GoogleChrome/http2-push-manifest), where the assets to be pushed are declared statically, this library __dynamically parses the HTML__ files and extracts contained asset that should be pushed.
 

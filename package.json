@@ -22,6 +22,9 @@
   "bin": {
     "serverpush-proxy": "./index.js"
   },
+  "engines": {
+    "node": ">=6.4.0"
+  },
   "keywords": [
     "http2",
     "server-push",
