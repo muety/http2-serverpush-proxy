@@ -1,6 +1,6 @@
 {
-  "name": "server-push-proxy",
-  "version": "0.0.1",
+  "name": "http2-serverpush-proxy",
+  "version": "0.0.2",
   "description": "A simple standalone reverse proxy that automatically enables server-push for assets related to a HTTP response.",
   "homepage": "https://github.com/n1try/http2-serverpush-proxy",
   "author": {
