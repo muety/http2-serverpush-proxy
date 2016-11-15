@@ -5,7 +5,7 @@ This is a reverse proxy that helps you to automatically make use of HTTP/2.0's [
 [![NPM](https://nodei.co/npm/http2-serverpush-proxy.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/http2-serverpush-proxy/)
 
 ## How it works
-Usually, websites consist of multiple assets, like CSS and JS files as well as images like PNGs, JPGs and SVGs. Traditionally, a user's browser fetches the HTML first, parses it and then downloads all linked assets. However, this is slow, since the assets can't be loaded before the HTML is completely fetched and parsed. With server push, your webserver can actively send those assets to the client browser even before it requested them. To prevent you from having to implement this functionality, _http2-serverpush-proxy_ sits as a proxy between your actual webserver and the user. In contrast to some other approaches like [http2-push-manifest](https://github.com/GoogleChrome/http2-push-manifest), where the assets to be pushed are declared statically, this library __dynamically parses the HTML__ files and extracts contained asset that should be pushed.
+Usually, websites consist of multiple assets, like CSS and JS files as well as images like PNGs, JPGs and SVGs. Traditionally, a user's browser fetches the HTML first, parses it and then downloads all linked assets. However, this is slow, since the assets can't be loaded before the HTML is completely fetched and parsed. With server push, your webserver can actively sends those assets to the client browser even before it requested them. To prevent you from having to implement this functionality, _http2-serverpush-proxy_ sits as a proxy between your actual webserver and the user. In contrast to some other approaches like [http2-push-manifest](https://github.com/GoogleChrome/http2-push-manifest), where the assets to be pushed are declared statically, this library __dynamically parses the HTML__ files and extracts contained asset that should be pushed.
 
 ![](https://anchr.io/i/XEitW.png)
 Without server push
@@ -63,9 +63,9 @@ Instantiating the middleware happens through calling a function (see line 1) tha
 * `extensions` __[optional]__: File extensions to be push candidates Defaults to: see [this section](#what-is-pushed)
 
 ## What is pushed?
-Currently, `<img src="..."`, `<script src="..."` and `<link rel="..."` attributes are parsed when looking for assets. Supported file types to be pushed include `css`, `js`, `png`, `jpg`, `gif` and , `svg`.
+Currently, `<img src="..."`, `<script src="..."` and `<link href="..."` attributes are parsed when looking for assets. Supported file types to be pushed include `css`, `js`, `png`, `jpg`, `gif` and , `svg`.
 
-Non-GET requests as well as requests, which don't `Accept` HTML are directly piped to to and from the proxy. GET requests, which accept HTML (`text/html`, `text/*`, `*/*`) are fetched by the proxy first. If `Content-Type` doesn't equal `text/html`, they're written to the response. Otherwise the HTML response body (the one from the proxied server) is parsed, assets are fetched and pushed and finally the HTML payload is also written to the response.
+Non-GET requests as well as requests, which don't `Accept` HTML are directly piped to and from the proxy. GET requests, which accept HTML (`text/html`, `text/*`, `*/*`) are fetched by the proxy first. If `Content-Type` doesn't equal `text/html`, they're written to the response. Otherwise the HTML response body (the one from the proxied server) is parsed, assets are fetched and pushed and finally the HTML payload is also written to the response.
 
 ## Constraints
 * The proxied server mustn't use encryption (no HTTPS)
